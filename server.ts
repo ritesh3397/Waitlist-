@@ -200,8 +200,37 @@ app.post("/api/waitlist/submit", async (req, res) => {
   }
 });
 
+// Admin master authentication passcode setup
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
+
+// Authentication middleware to guard admin routes
+const adminAuthMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.substring(7).trim() : authHeader.trim();
+  
+  if (token === ADMIN_PASSWORD) {
+    next();
+  } else {
+    res.status(401).json({ error: "Access Denied: Invalid or missing administrator session credentials." });
+  }
+};
+
+// Admin authentication login endpoint
+app.post("/api/admin/login", (req, res) => {
+  const { password } = req.body;
+  if (!password) {
+    res.status(400).json({ error: "Administrator password is required." });
+    return;
+  }
+  if (password === ADMIN_PASSWORD) {
+    res.json({ success: true, token: ADMIN_PASSWORD });
+  } else {
+    res.status(401).json({ error: "Access Denied: Verification failed. Incorrect password." });
+  }
+});
+
 // 2. Get list of submissions (Admin only)
-app.get("/api/admin/submissions", (req, res) => {
+app.get("/api/admin/submissions", adminAuthMiddleware, (req, res) => {
   try {
     const submissions = loadSubmissions();
     res.json(submissions);
@@ -211,7 +240,7 @@ app.get("/api/admin/submissions", (req, res) => {
 });
 
 // 3. Clear submissions/Delete (with protection)
-app.post("/api/admin/clear-submissions", (req, res) => {
+app.post("/api/admin/clear-submissions", adminAuthMiddleware, (req, res) => {
   try {
     const { confirm } = req.body;
     if (confirm !== "YES_DELETE_ALL") {
@@ -226,7 +255,7 @@ app.post("/api/admin/clear-submissions", (req, res) => {
 });
 
 // 4. Get integration settings
-app.get("/api/admin/settings", (req, res) => {
+app.get("/api/admin/settings", adminAuthMiddleware, (req, res) => {
   try {
     const settings = loadSettings();
     // Return settings except the raw token, maybe return a masked or indicator
@@ -242,7 +271,7 @@ app.get("/api/admin/settings", (req, res) => {
 });
 
 // 5. Update settings
-app.post("/api/admin/settings", (req, res) => {
+app.post("/api/admin/settings", adminAuthMiddleware, (req, res) => {
   try {
     const { spreadsheetId, sheetUrl } = req.body;
     const settings = loadSettings();
@@ -256,7 +285,7 @@ app.post("/api/admin/settings", (req, res) => {
 });
 
 // 6. Save Google integration token
-app.post("/api/admin/save-token", (req, res) => {
+app.post("/api/admin/save-token", adminAuthMiddleware, (req, res) => {
   try {
     const { accessToken } = req.body;
     if (!accessToken) {
@@ -273,7 +302,7 @@ app.post("/api/admin/save-token", (req, res) => {
 });
 
 // 7. Sync all pending entries to Google Sheets
-app.post("/api/admin/sync", async (req, res) => {
+app.post("/api/admin/sync", adminAuthMiddleware, async (req, res) => {
   try {
     const { accessToken: clientToken, forceAll } = req.body;
     const settings = loadSettings();

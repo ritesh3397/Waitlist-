@@ -25,7 +25,20 @@ import {
 import { Submission, Settings as SettingsType } from "../types";
 import { googleSignIn } from "../lib/firebase";
 
-export default function AdminPortal() {
+interface AdminPortalProps {
+  adminPassword?: string;
+  onLogout?: () => void;
+}
+
+export default function AdminPortal({ adminPassword, onLogout }: AdminPortalProps = {}) {
+  const getAdminHeaders = (extraHeaders: Record<string, string> = {}) => {
+    const adminPass = adminPassword || sessionStorage.getItem("admin_password") || "";
+    return {
+      "Authorization": `Bearer ${adminPass}`,
+      ...extraHeaders
+    };
+  };
+
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [settings, setSettings] = useState<SettingsType>({
     spreadsheetId: "",
@@ -69,7 +82,9 @@ export default function AdminPortal() {
 
   const fetchSubmissions = async () => {
     try {
-      const response = await fetch("/api/admin/submissions");
+      const response = await fetch("/api/admin/submissions", {
+        headers: getAdminHeaders()
+      });
       if (response.ok) {
         const data = await response.json();
         setSubmissions(data);
@@ -81,7 +96,9 @@ export default function AdminPortal() {
 
   const fetchSettings = async () => {
     try {
-      const response = await fetch("/api/admin/settings");
+      const response = await fetch("/api/admin/settings", {
+        headers: getAdminHeaders()
+      });
       if (response.ok) {
         const data = await response.json();
         setSettings(data);
@@ -158,7 +175,7 @@ export default function AdminPortal() {
     try {
       const response = await fetch("/api/admin/save-token", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ accessToken: token }),
       });
 
@@ -237,7 +254,7 @@ export default function AdminPortal() {
       const url = `https://docs.google.com/spreadsheets/d/${cleanId}/edit`;
       const response = await fetch("/api/admin/settings", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           spreadsheetId: cleanId,
           sheetUrl: url,
@@ -390,7 +407,7 @@ export default function AdminPortal() {
       // Save connection settings in the backend
       const saveResponse = await fetch("/api/admin/settings", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           spreadsheetId,
           sheetUrl,
@@ -426,7 +443,7 @@ export default function AdminPortal() {
     try {
       const response = await fetch("/api/admin/sync", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ accessToken: tempToken, forceAll }),
       });
 
@@ -461,7 +478,7 @@ export default function AdminPortal() {
     try {
       const response = await fetch("/api/admin/settings", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           spreadsheetId: "",
           sheetUrl: "",
@@ -492,7 +509,7 @@ export default function AdminPortal() {
     try {
       const response = await fetch("/api/admin/clear-submissions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ confirm: "YES_DELETE_ALL" }),
       });
 

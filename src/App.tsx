@@ -21,6 +21,76 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"landing" | "admin">("landing");
   const [formSubmitted, setFormSubmitted] = useState(false);
 
+  // Administrator Session Authentication states
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    return sessionStorage.getItem("admin_authenticated") === "true";
+  });
+  const [adminPassword, setAdminPassword] = useState<string>(() => {
+    return sessionStorage.getItem("admin_password") || "";
+  });
+  const [adminLoginPasswordInput, setAdminLoginPasswordInput] = useState<string>("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = useState<boolean>(false);
+
+  // Pathname routing checks to catch direct visits to private /admin.riya or public attempts to /admin /admin-center
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path === "/admin.riya") {
+      setActiveTab("admin");
+      sessionStorage.setItem("has_visited_private_admin", "true");
+      // Seamlessly mask the URL clean to match SPA
+      window.history.replaceState(null, "", "/");
+    } else if (path === "/admin" || path === "/admin-center" || path === "/admin-portal") {
+      const isAuthed = sessionStorage.getItem("admin_authenticated") === "true";
+      if (isAuthed) {
+        setActiveTab("admin");
+      } else {
+        setActiveTab("landing");
+      }
+      window.history.replaceState(null, "", "/");
+    }
+  }, []);
+
+  const handleAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminLoginPasswordInput.trim()) {
+      setLoginError("Please enter a passcode.");
+      return;
+    }
+    setLoginLoading(true);
+    setLoginError(null);
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: adminLoginPasswordInput }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        sessionStorage.setItem("admin_authenticated", "true");
+        sessionStorage.setItem("admin_password", adminLoginPasswordInput);
+        setIsAdmin(true);
+        setAdminPassword(adminLoginPasswordInput);
+        setLoginError(null);
+      } else {
+        setLoginError(data.error || "Access Denied: Invalid admin passcode.");
+      }
+    } catch (err: any) {
+      setLoginError("Failed to authenticate. Server is unreachable.");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleAdminLogout = () => {
+    sessionStorage.removeItem("admin_authenticated");
+    sessionStorage.removeItem("admin_password");
+    setIsAdmin(false);
+    setAdminPassword("");
+    setAdminLoginPasswordInput("");
+    setActiveTab("landing");
+  };
+
   // Smooth scroll to waitlist form handler
   const scrollToForm = () => {
     const element = document.getElementById("waitlist-form-card");
@@ -59,35 +129,37 @@ export default function App() {
           </span>
         </div>
 
-        {/* Dynamic view toggler */}
-        <div className="flex items-center gap-3">
-          <div className="p-1 bg-[#0d121f] border border-slate-800/80 rounded-xl flex items-center gap-1">
-            <button
-              onClick={() => setActiveTab("landing")}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition ${
-                activeTab === "landing"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              id="toggle-landing-btn"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              Landing View
-            </button>
-            <button
-              onClick={() => setActiveTab("admin")}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition ${
-                activeTab === "admin"
-                  ? "bg-slate-800 text-slate-100 border border-slate-700/50"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-              id="toggle-admin-btn"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Admin Center
-            </button>
+        {/* Dynamic view toggler - ONLY visible to authenticated admins */}
+        {isAdmin && (
+          <div className="flex items-center gap-3">
+            <div className="p-1 bg-[#0d121f] border border-slate-800/80 rounded-xl flex items-center gap-1">
+              <button
+                onClick={() => setActiveTab("landing")}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition ${
+                  activeTab === "landing"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/10"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+                id="toggle-landing-btn"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Landing View
+              </button>
+              <button
+                onClick={() => setActiveTab("admin")}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition ${
+                  activeTab === "admin"
+                    ? "bg-slate-800 text-slate-100 border border-slate-700/50"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+                id="toggle-admin-btn"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                Admin Center
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
       {/* Main Container and Render */}
@@ -231,6 +303,81 @@ export default function App() {
                 </div>
               </div>
             </motion.div>
+          ) : !isAdmin ? (
+            <motion.div
+              key="auth-required"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="max-w-md mx-auto my-12"
+              id="admin-auth-card"
+            >
+              <div className="p-8 bg-slate-900/30 border border-slate-800/80 rounded-2xl shadow-2xl relative overflow-hidden flex flex-col items-center text-center space-y-6">
+                
+                {/* Subtle cosmic circle graphic */}
+                <div className="absolute top-[-20%] left-[-20%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-[40px] pointer-events-none" />
+                
+                <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 relative">
+                  <Lock className="w-7 h-7" />
+                  <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full animate-pulse border border-[#080a10]" />
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold text-white font-sans tracking-tight">
+                    Admin Access Restricted
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed font-sans max-w-sm">
+                    This section contains waitlist submissions, Google Sheets integrations, and customer logs. Please authenticate to proceed.
+                  </p>
+                </div>
+
+                {/* Login Form */}
+                <form onSubmit={handleAdminLogin} className="w-full space-y-4">
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase font-sans tracking-wider">
+                      Master Access Code
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        placeholder="Enter master passcode (default: admin)..."
+                        value={adminLoginPasswordInput}
+                        onChange={(e) => setAdminLoginPasswordInput(e.target.value)}
+                        className="w-full pl-3 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-100 placeholder-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                        autoFocus
+                      />
+                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-600">
+                        <Lock className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {loginError && (
+                    <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-lg text-left font-sans flex items-start gap-2">
+                      <span className="font-semibold">Error:</span> {loginError}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loginLoading}
+                    className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 cursor-pointer border border-transparent rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] transition shadow-md disabled:opacity-50"
+                  >
+                    {loginLoading ? "Verifying..." : "Unlock Console"}
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+
+                <div className="w-full pt-2 border-t border-slate-850/60">
+                  <button
+                    onClick={() => setActiveTab("landing")}
+                    className="text-xs text-slate-400 hover:text-slate-200 underline font-sans transition py-1 cursor-pointer"
+                  >
+                    Return to Landing Page
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           ) : (
             <motion.div
               key="admin"
@@ -250,10 +397,17 @@ export default function App() {
                     View active waitlist submissions database and connect Google Sheets.
                   </p>
                 </div>
+                <button
+                  onClick={handleAdminLogout}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-800 hover:border-rose-500/30 rounded-lg text-xs font-semibold text-slate-400 hover:text-rose-400 active:scale-95 transition bg-slate-950/20 cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  Logout Session
+                </button>
               </div>
 
               {/* Admin Portal Module */}
-              <AdminPortal />
+              <AdminPortal adminPassword={adminPassword} onLogout={handleAdminLogout} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -270,13 +424,17 @@ export default function App() {
               <Heart className="w-3 h-3 text-indigo-400 fill-indigo-400/20" />
               SaaS Waitlist
             </span>
-            <span>&bull;</span>
-            <button 
-              onClick={() => setActiveTab(activeTab === "landing" ? "admin" : "landing")}
-              className="text-indigo-400 hover:underline hover:text-indigo-300 cursor-pointer transition flex items-center gap-1"
-            >
-              {activeTab === "landing" ? "Configure Google Sheets Sync" : "Return to Landing Page"}
-            </button>
+            {isAdmin && (
+              <>
+                <span>&bull;</span>
+                <button 
+                  onClick={() => setActiveTab(activeTab === "landing" ? "admin" : "landing")}
+                  className="text-indigo-400 hover:underline hover:text-indigo-300 cursor-pointer transition flex items-center gap-1"
+                >
+                  {activeTab === "landing" ? "Configure Google Sheets Sync" : "Return to Landing Page"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </footer>
