@@ -1,0 +1,6 @@
+{
+  "name": "Wallovo Waitlist",
+  "description": "Collect, approve, and display testimonials on your website in minutes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
